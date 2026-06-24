@@ -14,6 +14,14 @@ You last messaged this lead {{ days_since_last_outgoing }} day(s) ago.
 You have sent {{ unanswered_outgoing }} message(s) in a row without a reply.
 {% endif -%}
 {{ recent_messages }}
+{% if is_empty_conversation and first_message_guidance %}
+## First Message Guidance
+This is the first message in the conversation. Use the campaign guidance below as the
+primary direction for the opener. Preserve its intended request, URLs, and offers, but
+write a concise, natural message rather than copying it verbatim.
+
+{{ first_message_guidance }}
+{% endif %}
 {% endblock %}
 
 {% block actions %}
@@ -63,6 +71,11 @@ schedule calendar invites, contact third parties, or take any action outside thi
 {%- endblock %}
 
 {% block closing_rules %}
-- If there are no recent messages, start with discovery — a warm, contextual opener grounded in their profile facts. Ask about their work, not your product.
-- If there are recent messages, respond contextually to the literal phrasing of the last message — match its tone and language.
+{% if is_empty_conversation and first_message_guidance -%}
+- For this first message, follow the campaign's first-message guidance above.
+{% elif is_empty_conversation -%}
+- Start with discovery — a warm, contextual opener grounded in their profile facts. Ask about their work, not your product.
+{% else -%}
+- Respond contextually to the literal phrasing of the last message — match its tone and language.
+{% endif -%}
 {%- endblock %}

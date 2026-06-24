@@ -38,6 +38,7 @@ class OnboardConfig:
     campaign_name: str = ""
     product_description: str = ""
     campaign_objective: str = ""
+    first_message_guidance: str = ""
     booking_link: str = ""
     seed_urls: str = ""
     llm_api_key: str = ""
@@ -56,7 +57,7 @@ class OnboardConfig:
 
 _CAMPAIGN_KEYS = {
     "campaign_name", "product_description", "campaign_objective",
-    "booking_link", "seed_urls",
+    "first_message_guidance", "booking_link", "seed_urls",
 }
 _ACCOUNT_KEYS = {
     "linkedin_email", "linkedin_password", "newsletter", "contribute_to_hub",
@@ -128,7 +129,13 @@ def _read_default_file(path) -> str:
     return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
 
-def _create_campaign(name: str, product_docs: str, objective: str, booking_link: str = ""):
+def _create_campaign(
+    name: str,
+    product_docs: str,
+    objective: str,
+    booking_link: str = "",
+    first_message_guidance: str = "",
+):
     """Create a Campaign record and return it."""
     from openoutreach.core.models import Campaign
 
@@ -136,6 +143,7 @@ def _create_campaign(name: str, product_docs: str, objective: str, booking_link:
         name=name,
         product_docs=product_docs,
         campaign_objective=objective,
+        first_message_guidance=first_message_guidance,
         booking_link=booking_link,
     )
     logger.info("Campaign '%s' created!", name)
@@ -212,6 +220,7 @@ def apply(config: OnboardConfig) -> None:
             product_docs=config.product_description or _read_default_file(DEFAULT_PRODUCT_DOCS),
             objective=config.campaign_objective or _read_default_file(DEFAULT_CAMPAIGN_OBJECTIVE),
             booking_link=config.booking_link,
+            first_message_guidance=config.first_message_guidance,
         )
         _create_seed_leads(campaign, config.seed_urls)
 

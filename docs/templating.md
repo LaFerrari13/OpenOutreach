@@ -25,6 +25,7 @@ Follow-up behavior is controlled by:
 - **Campaign fields** (via Django Admin or onboarding):
   - `product_docs` — product/service description, used as context for the agent.
   - `campaign_objective` — campaign goal, used as context for the agent.
+  - `first_message_guidance` — optional guidance used only for the first LinkedIn message in an empty thread.
   - `booking_link` — included naturally in messages when suggesting a meeting.
 
 - **LLM settings** (via `.env` or environment variables):

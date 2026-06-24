@@ -69,6 +69,35 @@ class TestRenderSystemPrompt:
         assert "(none yet)" in prompt
         assert "No recent messages." in prompt
 
+    def test_includes_campaign_guidance_for_empty_conversation(self, db, fake_session):
+        from openoutreach.core.agents.follow_up import _render_system_prompt
+
+        guidance = "Ask for candid feedback at https://tamdx.sorvanis.ai."
+        fake_session.campaign.first_message_guidance = guidance
+        fake_session.campaign.save(update_fields=["first_message_guidance"])
+        lead = LeadFactory(public_identifier="bob")
+        deal = DealFactory(lead=lead, campaign=fake_session.campaign)
+
+        prompt = _render_system_prompt(fake_session, deal, [])
+
+        assert "## First Message Guidance" in prompt
+        assert guidance in prompt
+        assert "follow the campaign's first-message guidance" in prompt
+
+    def test_omits_campaign_guidance_after_messages_exist(self, db, fake_session):
+        from openoutreach.core.agents.follow_up import _render_system_prompt
+
+        guidance = "Ask for candid feedback at https://tamdx.sorvanis.ai."
+        fake_session.campaign.first_message_guidance = guidance
+        fake_session.campaign.save(update_fields=["first_message_guidance"])
+        lead = LeadFactory(public_identifier="bob")
+        deal = DealFactory(lead=lead, campaign=fake_session.campaign)
+
+        prompt = _render_system_prompt(fake_session, deal, [_msg("Hello", is_outgoing=False)])
+
+        assert "## First Message Guidance" not in prompt
+        assert guidance not in prompt
+
 
 class TestLoadRecentMessages:
     def test_returns_last_n_in_chronological_order(self, db, fake_session):

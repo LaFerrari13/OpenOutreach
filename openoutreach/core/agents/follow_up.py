@@ -134,6 +134,8 @@ def _render_system_prompt(session, deal, recent_messages: list) -> str:
         contact_email=session.linkedin_profile.linkedin_username,
         chat_summary=_format_facts(deal.chat_summary),
         recent_messages=_format_recent_messages(recent_messages, now),
+        is_empty_conversation=not recent_messages,
+        first_message_guidance=(deal.campaign.first_message_guidance or "").strip(),
         today=now.strftime("%Y-%m-%d"),
         days_since_last_outgoing=_days_since_last_outgoing(recent_messages, now),
         unanswered_outgoing=_count_unanswered_outgoing(recent_messages),

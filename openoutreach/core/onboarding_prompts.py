@@ -22,6 +22,11 @@ CAMPAIGN_OBJECTIVE = MultilineText(
     "campaign_objective",
     "Campaign objective (e.g. 'sell analytics platform to CTOs')",
 )
+FIRST_MESSAGE_GUIDANCE = MultilineText(
+    "first_message_guidance",
+    "First LinkedIn message guidance (used only for an empty conversation)",
+    required=False,
+)
 BOOKING_LINK = Text("booking_link", "Booking link (e.g. https://cal.com/you)", required=False)
 SEED_URLS = MultilineText(
     "seed_urls", "LinkedIn seed profile URLs (one per line)", required=False,
@@ -72,7 +77,7 @@ LEGAL = Confirm(
 # ── Profile ──────────────────────────────────────────────────────
 
 SELF_HOSTED_QUESTIONS = [
-    CAMPAIGN_NAME, PRODUCT_DESCRIPTION, CAMPAIGN_OBJECTIVE, BOOKING_LINK,
+    CAMPAIGN_NAME, PRODUCT_DESCRIPTION, CAMPAIGN_OBJECTIVE, FIRST_MESSAGE_GUIDANCE, BOOKING_LINK,
     SEED_URLS,
     LINKEDIN_EMAIL, LINKEDIN_PASSWORD,
     AI_MODEL, LLM_API_KEY, LLM_API_BASE,

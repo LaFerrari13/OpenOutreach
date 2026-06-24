@@ -23,6 +23,7 @@ class Command(BaseCommand):
         parser.add_argument("--campaign-name", default="")
         parser.add_argument("--product-description", default="")
         parser.add_argument("--campaign-objective", default="")
+        parser.add_argument("--first-message-guidance", default="")
         parser.add_argument("--booking-link", default="")
         parser.add_argument("--seed-urls", default="")
         parser.add_argument("--llm-api-key", default="")
@@ -60,6 +61,7 @@ class Command(BaseCommand):
                 campaign_name=options["campaign_name"],
                 product_description=options["product_description"],
                 campaign_objective=options["campaign_objective"],
+                first_message_guidance=options["first_message_guidance"],
                 booking_link=options["booking_link"],
                 seed_urls=options["seed_urls"],
                 llm_api_key=options["llm_api_key"],
