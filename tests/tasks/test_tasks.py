@@ -80,6 +80,19 @@ def _make_task(task_type, payload, **kwargs):
     )
 
 
+def _add_chat_message(session, deal, content, is_outgoing, created_at, suffix):
+    from openoutreach.chat.models import ChatMessage
+
+    return ChatMessage.objects.create(
+        deal=deal,
+        content=content,
+        is_outgoing=is_outgoing,
+        owner=session.django_user,
+        linkedin_urn=f"urn:msg:{deal.pk}:{suffix}",
+        creation_date=created_at,
+    )
+
+
 def _build_context(fake_session):
     """Build qualifiers dict for task handlers."""
     qualifier = BayesianQualifier(seed=42)
@@ -285,6 +298,159 @@ class TestHandleFollowUp:
         mock_send.assert_called_once()
         mock_sync.assert_called_once_with(fake_session, "alice")
         assert ActionLog.objects.filter(action_type=ActionLog.ActionType.FOLLOW_UP).count() == 1
+
+    @patch("openoutreach.linkedin.db.chat.sync_conversation")
+    @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
+    @patch("linkedin_cli.actions.message.send_raw_message")
+    @patch("openoutreach.core.agents.follow_up.run_follow_up_agent")
+    def test_skips_after_two_unanswered_outgoing(
+        self, mock_agent, mock_send, mock_materialize, mock_sync, fake_session,
+    ):
+        _make_connected(fake_session)
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+        original_update = timezone.now() - timedelta(minutes=5)
+        Deal.objects.filter(pk=deal.pk).update(update_date=original_update)
+
+        base = timezone.now() - timedelta(days=10)
+        _add_chat_message(fake_session, deal, "first nudge", True, base, "out-1")
+        _add_chat_message(fake_session, deal, "second nudge", True, base + timedelta(minutes=1), "out-2")
+
+        task = _make_task(Task.TaskType.FOLLOW_UP, {"campaign_id": fake_session.campaign.pk})
+        handle_follow_up(task, fake_session, _build_context(fake_session))
+
+        mock_sync.assert_called_once_with(fake_session, "alice")
+        mock_materialize.assert_not_called()
+        mock_agent.assert_not_called()
+        mock_send.assert_not_called()
+        assert ActionLog.objects.filter(action_type=ActionLog.ActionType.FOLLOW_UP).count() == 0
+
+        deal.refresh_from_db()
+        assert deal.state == ProfileState.CONNECTED
+        assert deal.outcome == ""
+        assert deal.update_date > original_update
+
+    @patch("openoutreach.linkedin.db.chat.sync_conversation")
+    @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
+    @patch("linkedin_cli.actions.message.send_raw_message", return_value=True)
+    @patch("openoutreach.core.agents.follow_up.run_follow_up_agent")
+    def test_synced_reply_lifts_two_message_block(
+        self, mock_agent, mock_send, mock_materialize, mock_sync, fake_session,
+    ):
+        mock_agent.return_value = FollowUpDecision(
+            action="send_message", message="Thanks for taking a look.", follow_up_hours=48,
+        )
+        _make_connected(fake_session)
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+
+        base = timezone.now() - timedelta(days=10)
+        _add_chat_message(fake_session, deal, "first nudge", True, base, "out-1")
+        _add_chat_message(fake_session, deal, "second nudge", True, base + timedelta(minutes=1), "out-2")
+
+        inserted_reply = []
+
+        def sync_side_effect(session_arg, public_id):
+            if not inserted_reply:
+                _add_chat_message(
+                    session_arg,
+                    deal,
+                    "sure, send more",
+                    False,
+                    base + timedelta(minutes=2),
+                    "in-1",
+                )
+                inserted_reply.append(True)
+
+        mock_sync.side_effect = sync_side_effect
+
+        task = _make_task(Task.TaskType.FOLLOW_UP, {"campaign_id": fake_session.campaign.pk})
+        handle_follow_up(task, fake_session, _build_context(fake_session))
+
+        assert mock_sync.call_count == 2
+        mock_materialize.assert_called_once()
+        mock_agent.assert_called_once()
+        mock_send.assert_called_once()
+        assert ActionLog.objects.filter(action_type=ActionLog.ActionType.FOLLOW_UP).count() == 1
+
+    @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
+    @patch("linkedin_cli.actions.message.send_raw_message")
+    @patch("openoutreach.core.agents.follow_up.run_follow_up_agent")
+    def test_agent_sync_revealed_second_outgoing_still_blocks_send(
+        self, mock_agent, mock_send, mock_materialize, fake_session,
+    ):
+        _make_connected(fake_session)
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+
+        base = timezone.now() - timedelta(days=10)
+        _add_chat_message(fake_session, deal, "first nudge", True, base, "out-1")
+
+        def agent_side_effect(session_arg, deal_arg):
+            _add_chat_message(
+                session_arg,
+                deal_arg,
+                "second nudge",
+                True,
+                base + timedelta(minutes=1),
+                "out-2",
+            )
+            return FollowUpDecision(
+                action="send_message", message="One more thing.", follow_up_hours=48,
+            )
+
+        mock_agent.side_effect = agent_side_effect
+
+        task = _make_task(Task.TaskType.FOLLOW_UP, {"campaign_id": fake_session.campaign.pk})
+        handle_follow_up(task, fake_session, _build_context(fake_session))
+
+        mock_materialize.assert_called_once()
+        mock_agent.assert_called_once()
+        mock_send.assert_not_called()
+        assert ActionLog.objects.filter(action_type=ActionLog.ActionType.FOLLOW_UP).count() == 0
+
+        deal.refresh_from_db()
+        assert deal.state == ProfileState.CONNECTED
+
+    @patch("openoutreach.linkedin.db.chat.sync_conversation")
+    @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
+    @patch("openoutreach.core.agents.follow_up.run_follow_up_agent")
+    def test_proceeds_when_last_two_messages_are_not_both_outgoing(
+        self, mock_agent, mock_materialize, mock_sync, fake_session,
+    ):
+        mock_agent.return_value = FollowUpDecision(action="wait", follow_up_hours=48)
+        _make_connected(fake_session)
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+
+        base = timezone.now() - timedelta(days=10)
+        _add_chat_message(fake_session, deal, "first nudge", True, base, "out-1")
+        _add_chat_message(fake_session, deal, "lead reply", False, base + timedelta(minutes=1), "in-1")
+
+        task = _make_task(Task.TaskType.FOLLOW_UP, {"campaign_id": fake_session.campaign.pk})
+        handle_follow_up(task, fake_session, _build_context(fake_session))
+
+        mock_sync.assert_not_called()
+        mock_materialize.assert_called_once()
+        mock_agent.assert_called_once()
+
+    @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
+    @patch("openoutreach.core.agents.follow_up.run_follow_up_agent")
+    def test_one_recent_unanswered_message_uses_existing_cooldown(
+        self, mock_agent, mock_materialize, fake_session,
+    ):
+        _make_connected(fake_session)
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+        _add_chat_message(
+            fake_session,
+            deal,
+            "recent nudge",
+            True,
+            timezone.now() - timedelta(days=1),
+            "out-1",
+        )
+
+        task = _make_task(Task.TaskType.FOLLOW_UP, {"campaign_id": fake_session.campaign.pk})
+        handle_follow_up(task, fake_session, _build_context(fake_session))
+
+        mock_materialize.assert_not_called()
+        mock_agent.assert_not_called()
 
     @patch("openoutreach.core.db.summaries.materialize_profile_summary_if_missing")
     @patch("linkedin_cli.actions.message.send_raw_message", return_value=False)

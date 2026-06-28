@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Required silence between nudges scales with unanswered count:
 # 1 unanswered → 3d, 2 → 6d, 3 → 9d. Skips the LLM call while open.
 MIN_DAYS_PER_UNANSWERED = 3
+MAX_UNANSWERED_OUTGOING = 2
 
 
 def _build_send_profile(deal) -> dict:
@@ -44,6 +45,42 @@ def _too_soon_to_nudge(deal) -> bool:
 
     required = timedelta(days=nudges.count() * MIN_DAYS_PER_UNANSWERED)
     return timezone.now() - last.creation_date < required
+
+
+def _last_messages_are_outgoing(deal, count: int = MAX_UNANSWERED_OUTGOING) -> bool:
+    """Return True when the latest ``count`` messages are all from us."""
+    from openoutreach.chat.models import ChatMessage
+
+    latest = list(
+        ChatMessage.objects.filter(deal=deal)
+        .order_by("-creation_date", "-pk")[:count]
+    )
+    return len(latest) == count and all(msg.is_outgoing for msg in latest)
+
+
+def _blocked_by_unanswered_outgoing_cap(deal, session, public_id: str) -> bool:
+    """Hard-stop a conversation once two outgoing messages are unanswered."""
+    if not _last_messages_are_outgoing(deal):
+        return False
+
+    from openoutreach.linkedin.db.chat import sync_conversation
+
+    try:
+        sync_conversation(session, public_id)
+    except Exception:
+        logger.exception("pre-follow-up sync failed for %s; preserving two-message guard", public_id)
+        return True
+
+    return _last_messages_are_outgoing(deal)
+
+
+def _skip_unanswered_outgoing_cap(campaign, deal, public_id: str) -> None:
+    logger.info(
+        "[%s] follow_up: %s has %d unanswered outgoing messages — skipping",
+        campaign, public_id, MAX_UNANSWERED_OUTGOING,
+    )
+    # Move this still-open conversation behind other CONNECTED deals.
+    deal.save()
 
 
 def _connected_deals(campaign):
@@ -105,12 +142,19 @@ def handle_follow_up(task, session, qualifiers):
     # up and contributes it. No-op once an email is captured.
     capture_and_contribute(deal.lead, session)
 
+    if _blocked_by_unanswered_outgoing_cap(deal, session, public_id):
+        _skip_unanswered_outgoing_cap(campaign, deal, public_id)
+        return
+
     materialize_profile_summary_if_missing(deal, session)
     decision = run_follow_up_agent(session, deal)
 
     profile = _build_send_profile(deal)
 
     if decision.action == "send_message":
+        if _last_messages_are_outgoing(deal):
+            _skip_unanswered_outgoing_cap(campaign, deal, public_id)
+            return
         logger.info("[%s] follow_up message for %s: %s", campaign, public_id, decision.message)
         sent = send_raw_message(session, profile, decision.message)
         if not sent:
