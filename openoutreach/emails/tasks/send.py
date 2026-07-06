@@ -46,7 +46,10 @@ def handle_email(task, session, qualifiers):
     materialize_profile_summary_if_missing(deal, session)
     draft = compose_opener_email(session, deal)
 
-    message_id = send_email(mailbox, deal.lead.api_email, draft.subject, draft.body)
+    message_id = send_email(
+        mailbox, deal.lead.api_email, draft.subject, draft.body,
+        bcc=session.linkedin_profile.linkedin_username,
+    )
     _record_sent_email(deal, mailbox, draft.subject, message_id)
     logger.info("[%s] email sent to %s (%s): %s\n%s",
                 campaign, public_id, deal.lead.api_email, draft.subject, draft.body)

@@ -19,66 +19,48 @@ def _box(email="a@b.com"):
     return Mailbox.objects.create(username=email, password="p", from_address=email)
 
 
-# ── State machine ────────────────────────────────────────────────
-
-def test_state_is_no_bettercontact_when_key_blank():
-    _set_bettercontact_key("")
-    assert nudge.email_state() == nudge.NO_BETTERCONTACT
-
-
-def test_state_is_no_mailbox_when_bettercontact_set_but_no_box():
-    _set_bettercontact_key()
-    assert nudge.email_state() == nudge.NO_MAILBOX
-
-
-def test_state_is_configured_with_a_box():
-    _set_bettercontact_key()
-    _box()
-    assert nudge.email_state() == nudge.CONFIGURED
-
-
 # ── Copy ─────────────────────────────────────────────────────────
 
-def test_render_no_bettercontact_uses_numbers_and_link():
-    out = nudge.render(nudge.NO_BETTERCONTACT, {
+def test_render_bettercontact_uses_numbers_and_link():
+    out = nudge.render(nudge.BETTERCONTACT_NUDGE, {
         "qualified": 42, "pending": 0, "resolved_emails": 0, "connect_cap": 20,
     })
     assert "42" in out and "20" in out and nudge.BETTERCONTACT_AFFILIATE_URL in out
     assert nudge.EXPLAINER_URL in out  # points at the email-outreach explainer
 
 
-def test_render_no_mailbox_always_shows_warmup_and_sender_link():
-    out = nudge.render(nudge.NO_MAILBOX, {
+def test_render_mailbox_always_shows_warmup_and_sender_link():
+    out = nudge.render(nudge.MAILBOX_NUDGE, {
         "qualified": 0, "pending": 0, "resolved_emails": 0, "connect_cap": 20,
     })
     assert "warm" in out.lower() and nudge.SENDER_AFFILIATE_URL in out
     assert " 0 " not in out  # no awkward zero right after BetterContact is enabled
 
 
-def test_render_no_mailbox_leads_with_resolved_count_when_present():
-    out = nudge.render(nudge.NO_MAILBOX, {
+def test_render_mailbox_leads_with_resolved_count_when_present():
+    out = nudge.render(nudge.MAILBOX_NUDGE, {
         "qualified": 0, "pending": 480, "resolved_emails": 312, "connect_cap": 20,
     })
     assert "312" in out  # resolved takes precedence over pending
     assert "480" not in out
 
 
-def test_render_no_mailbox_falls_back_to_pending_when_nothing_resolved_yet():
-    out = nudge.render(nudge.NO_MAILBOX, {
+def test_render_mailbox_falls_back_to_pending_when_nothing_resolved_yet():
+    out = nudge.render(nudge.MAILBOX_NUDGE, {
         "qualified": 0, "pending": 480, "resolved_emails": 0, "connect_cap": 20,
     })
     assert "480" in out
 
 
 def test_render_plain_has_no_escape_codes():
-    out = nudge.render(nudge.NO_BETTERCONTACT, {
+    out = nudge.render(nudge.BETTERCONTACT_NUDGE, {
         "qualified": 1, "pending": 0, "resolved_emails": 0, "connect_cap": 20,
     })
     assert "\033" not in out
 
 
 def test_render_hyperlink_wraps_url_in_osc8():
-    out = nudge.render(nudge.NO_BETTERCONTACT, {
+    out = nudge.render(nudge.BETTERCONTACT_NUDGE, {
         "qualified": 1, "pending": 0, "resolved_emails": 0, "connect_cap": 20,
     }, hyperlink=True)
     # OSC 8 opener carries the URL, and the URL stays visible as the link text.
@@ -99,61 +81,68 @@ def test_pipeline_stats_counts_the_pipeline():
     assert stats["connect_cap"] >= 1
 
 
-# ── Setup walk (prompt_email_setup) ──────────────────────────────
+# ── Per-launch offers (prompt_email_setup) ───────────────────────
 
 def _tty(yes=True):
     return patch("openoutreach.emails.nudge.sys.stdin.isatty", return_value=yes)
 
 
-def _stub_collectors(**by_state):
-    return patch("openoutreach.emails.nudge._COLLECT_BY_STATE", by_state)
+def _stub_collectors():
+    """Replace both collectors with mocks; returns (finder, mailbox)."""
+    finder, mailbox = MagicMock(), MagicMock()
+    return finder, mailbox, patch.multiple(
+        "openoutreach.emails.nudge",
+        _collect_bettercontact_key=finder,
+        _collect_mailboxes=mailbox,
+    )
 
 
-def test_walk_advances_finder_then_mailbox_in_one_session():
-    _set_bettercontact_key("")  # start at NO_BETTERCONTACT
-    finder = MagicMock(side_effect=lambda: _set_bettercontact_key("k"))
-    mailbox = MagicMock(side_effect=_box)
-    with _tty(), patch("builtins.print"), _stub_collectors(
-        **{nudge.NO_BETTERCONTACT: finder, nudge.NO_MAILBOX: mailbox}
-    ):
+def test_offers_both_upgrades_when_neither_is_configured():
+    _set_bettercontact_key("")  # finder unconfigured; no mailbox either
+    finder, mailbox, stub = _stub_collectors()
+    with _tty(), patch("builtins.print"), stub:
         nudge.prompt_email_setup()
     finder.assert_called_once()
     mailbox.assert_called_once()
-    assert nudge.email_state() == nudge.CONFIGURED
 
 
-def test_walk_stops_at_the_first_skipped_step():
-    _set_bettercontact_key("")  # NO_BETTERCONTACT
-    finder = MagicMock()  # no-op = skipped (state stays NO_BETTERCONTACT)
-    mailbox = MagicMock()
-    with _tty(), patch("builtins.print"), _stub_collectors(
-        **{nudge.NO_BETTERCONTACT: finder, nudge.NO_MAILBOX: mailbox}
-    ):
+def test_skipping_the_finder_still_offers_the_mailbox():
+    """The two are independent: a skipped finder must not block mailbox setup."""
+    _set_bettercontact_key("")  # finder stays unconfigured (collector is a no-op)
+    finder, mailbox, stub = _stub_collectors()
+    with _tty(), patch("builtins.print"), stub:
         nudge.prompt_email_setup()
     finder.assert_called_once()
-    mailbox.assert_not_called()
+    mailbox.assert_called_once()  # offered despite the finder being skipped
 
 
-def test_walk_is_noop_when_already_configured():
+def test_offers_only_the_mailbox_when_the_finder_is_already_set():
+    _set_bettercontact_key("k")  # finder configured; still no mailbox
+    finder, mailbox, stub = _stub_collectors()
+    with _tty(), patch("builtins.print"), stub:
+        nudge.prompt_email_setup()
+    finder.assert_not_called()
+    mailbox.assert_called_once()
+
+
+def test_offers_nothing_when_both_are_configured():
     _set_bettercontact_key("k")
     _box()
-    finder, mailbox = MagicMock(), MagicMock()
-    with _tty(), patch("builtins.print"), _stub_collectors(
-        **{nudge.NO_BETTERCONTACT: finder, nudge.NO_MAILBOX: mailbox}
-    ):
+    finder, mailbox, stub = _stub_collectors()
+    with _tty(), patch("builtins.print"), stub:
         nudge.prompt_email_setup()
     finder.assert_not_called()
     mailbox.assert_not_called()
 
 
-def test_headless_logs_pending_step_without_collecting():
-    _set_bettercontact_key("")
-    finder = MagicMock()
-    with _tty(False), _stub_collectors(**{nudge.NO_BETTERCONTACT: finder, nudge.NO_MAILBOX: MagicMock()}), \
-         patch("openoutreach.emails.nudge.logger") as log:
+def test_headless_logs_pending_upgrades_without_collecting():
+    _set_bettercontact_key("")  # both pending → both logged, neither collected
+    finder, mailbox, stub = _stub_collectors()
+    with _tty(False), stub, patch("openoutreach.emails.nudge.logger") as log:
         nudge.prompt_email_setup()
     finder.assert_not_called()
-    log.info.assert_called_once()
+    mailbox.assert_not_called()
+    assert log.info.call_count == 2
 
 
 # ── Mailbox import ───────────────────────────────────────────────

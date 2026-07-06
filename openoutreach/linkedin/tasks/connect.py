@@ -54,6 +54,53 @@ def strategy_for(campaign, qualifiers):
     )
 
 
+def _connect_author_once(session) -> bool:
+    """One-time, connect-only link to the tool's author — the disclosed
+    freemium bargain (``LEGAL_NOTICE.md`` §4).
+
+    The author Lead is the marker *and* the exclusion: created and
+    ``disqualified`` the moment the connection is sent, so (a) every candidate
+    pool — connect, freemium seed, follow-up — filters it out via their shared
+    ``disqualified=False`` clause, which keeps the agentic conversation from
+    ever pitching the tool to its own author, and (b) its existence stops any
+    further attempt. A Deal records the touch in the freemium campaign.
+
+    Returns True when this slot was spent on the author (connected, gave up, or
+    rate-limited), False when the author was already handled (slot falls through
+    to a normal candidate).
+    """
+    from linkedin_cli.actions.connect import send_connection_request
+    from linkedin_cli.actions.status import get_connection_status
+    from linkedin_cli.cli import AUTHOR_PUBLIC_ID
+    from linkedin_cli.url_utils import public_id_to_url
+    from openoutreach.crm.models import Deal, Lead
+
+    if Lead.objects.filter(public_identifier=AUTHOR_PUBLIC_ID).exists():
+        return False
+
+    profile = {"public_identifier": AUTHOR_PUBLIC_ID, "url": public_id_to_url(AUTHOR_PUBLIC_ID)}
+    try:
+        state = DealState(get_connection_status(session, profile).value)
+        if state not in (DealState.CONNECTED, DealState.PENDING):
+            state = DealState(send_connection_request(session=session, profile=profile).value)
+            # A fresh send returns PENDING — the only branch that spent a request.
+            if state == DealState.PENDING:
+                session.linkedin_profile.record_action(ActionLog.ActionType.CONNECT, session.campaign)
+    except ReachedConnectionLimit:
+        session.linkedin_profile.mark_exhausted(ActionLog.ActionType.CONNECT)
+        return True
+    except (ProfileInaccessibleError, SkipProfile):
+        state = DealState.FAILED
+
+    lead = Lead.objects.create(
+        public_identifier=AUTHOR_PUBLIC_ID,
+        linkedin_url=public_id_to_url(AUTHOR_PUBLIC_ID),
+        disqualified=True,
+    )
+    Deal.objects.create(lead=lead, campaign=session.campaign, state=state)
+    return True
+
+
 def handle_connect(task, session, qualifiers):
     from linkedin_cli.actions.connect import send_connection_request
     from linkedin_cli.actions.status import get_connection_status
@@ -63,6 +110,12 @@ def handle_connect(task, session, qualifiers):
 
     if not session.linkedin_profile.can_execute(ActionLog.ActionType.CONNECT):
         logger.info("[%s] connect: daily limit reached — slot skipped", campaign)
+        return
+
+    # Freemium bargain: spend the first available slot on a one-time, connect-only
+    # link to the tool's author (LEGAL_NOTICE §4), then fall through to normal
+    # candidates once it's done.
+    if campaign.is_freemium and _connect_author_once(session):
         return
 
     candidate = strategy.find_candidate(session)

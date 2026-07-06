@@ -72,7 +72,7 @@ If neither is configured, every qualified lead simply routes to the LinkedIn con
 Pre-built images are published to GitHub Container Registry on every push to `master`.
 
 ```bash
-docker run --pull always -it -p 5900:5900 -p 6080:6080 -v ~/.openoutreach/data:/app/data ghcr.io/eracle/openoutreach:latest
+docker run --pull always -it -e ENABLE_VNC=true -p 5900:5900 -p 6080:6080 -v ~/.openoutreach/data:/app/data ghcr.io/eracle/openoutreach:latest
 
 # Open http://localhost:6080/vnc.html in your browser to watch the automation live
 ```
@@ -80,6 +80,8 @@ docker run --pull always -it -p 5900:5900 -p 6080:6080 -v ~/.openoutreach/data:/
 The interactive onboarding walks you through the three inputs above on first run. All data persists in `~/.openoutreach/data` on your host across restarts.
 
 Once the container is running, open **http://localhost:6080/vnc.html** in your browser to watch the browser live (noVNC). Alternatively, connect a native VNC client to `localhost:5900`.
+
+> **`-e ENABLE_VNC=true` is required for the viewer.** The VNC stack (Xvfb + x11vnc + noVNC) is installed in the image but only started when `ENABLE_VNC=true`. Without it, nothing listens on 5900/6080, so the published ports accept then instantly drop the connection (`End of stream`).
 
 For Docker Compose, build-from-source, and more options see the **[Docker Guide](./docs/docker.md)**.
 

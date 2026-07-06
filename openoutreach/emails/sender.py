@@ -20,16 +20,21 @@ def send_email(
     subject: str,
     body: str,
     *,
+    bcc: str | None = None,
     in_reply_to: str | None = None,
     references: str | None = None,
 ) -> str:
     """Send ``body`` from ``mailbox`` to ``to_address``; return the Message-ID.
 
+    ``bcc`` blind-copies the operator's own address so they keep a private record
+    of every send; ``send_message`` strips the Bcc header before transmission, so
+    the To recipient never sees it.
+
     ``in_reply_to``/``references`` thread a reply onto an existing email thread
     (both are prior Message-IDs). The returned Message-ID is stored on the
     outgoing ChatMessage so the next touch can thread onto it.
     """
-    message = _build_message(mailbox, to_address, subject, body, in_reply_to, references)
+    message = _build_message(mailbox, to_address, subject, body, bcc, in_reply_to, references)
     _deliver(mailbox, message)
     return message["Message-ID"]
 
@@ -37,12 +42,14 @@ def send_email(
 # ── Message assembly ──────────────────────────────────────────────
 
 
-def _build_message(mailbox, to_address, subject, body, in_reply_to, references) -> EmailMessage:
+def _build_message(mailbox, to_address, subject, body, bcc, in_reply_to, references) -> EmailMessage:
     """Assemble the email with threading headers and a domain-anchored Message-ID."""
     message = EmailMessage()
     message["Message-ID"] = _mint_message_id(mailbox.from_address)
     message["From"] = mailbox.from_address
     message["To"] = to_address
+    if bcc:
+        message["Bcc"] = bcc
     message["Subject"] = subject
     if in_reply_to:
         message["In-Reply-To"] = in_reply_to

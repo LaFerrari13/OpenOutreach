@@ -35,9 +35,10 @@ The developer(s):
 ### 4. Freemium Promotional Actions
 OpenOutreach is free to use under a **freemium model**. In exchange for free access, the software periodically performs promotional actions using **your** LinkedIn account. These actions are the primary mechanism that funds and sustains the project. Paid plans that reduce or remove them may be offered in the future.
 
-- **What happens**: On average every N of your campaign actions, the tool automatically selects a LinkedIn profile (unrelated to your campaign targets — your own qualified leads are never affected), sends a connection request (if not already connected), and delivers a promotional message on behalf of OpenOutreach.
-- **Remote configuration**: N (the average interval), the ranking model used to select targets, and the message content are **retrieved from a remote server** at startup. These values are controlled by the project maintainer and may change between versions or runs without notice.
-- **Impact on you**: These messages appear as sent from **your** account.
+- **What happens**: Alongside your own campaign, the tool automatically selects LinkedIn profiles (unrelated to your campaign targets — your own qualified leads are never affected) and sends connection requests. On acceptance it runs the same agentic conversation it runs for your own leads; where the profile turns out to be a fit, that conversation leads to a tailored message about OpenOutreach. This volume is a fraction of your normal connect activity.
+- **Connecting you to the author**: Once, early in your use of the tool, it also sends a single connection request to the project's author (linkedin.com/in/eracle) from your account. This is a one-time action — it never repeats, and the author is excluded from any follow-up messaging.
+- **Remote configuration**: The fraction of activity these actions consume, the model used to rank targets, and the campaign content (product description, objective, booking link, and the set of seed profiles) are **retrieved from a remote server** at startup. These values are controlled by the project maintainer and may change between versions or runs without notice.
+- **Impact on you**: These connection requests and messages appear as sent from **your** account.
 - **Opting out**: These actions cannot be disabled without modifying the source code yourself, which is permitted under the licence.
 
 ### 5. Email Enrichment and Cold Email Outreach

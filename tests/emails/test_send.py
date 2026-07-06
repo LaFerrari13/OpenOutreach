@@ -12,6 +12,7 @@ from openoutreach.core.models import Task
 from openoutreach.core.scheduler import flush_email_queue
 from openoutreach.crm.models import DealState
 from openoutreach.emails.models import Mailbox
+from openoutreach.emails.sender import send_email
 from openoutreach.emails.tasks.send import handle_email
 from tests.factories import DealFactory, LeadFactory
 
@@ -145,6 +146,25 @@ class TestFlushEmailQueue:
         assert self._pending_emails(fake_session.campaign) == 1
 
 
+# ── sender.send_email (SMTP assembly) ─────────────────────────────
+
+
+class TestSendEmailBcc:
+    def test_bcc_header_set_when_address_given(self):
+        box = Mailbox(username="s@infra.com", password="pw", from_address="s@infra.com")
+        with patch("openoutreach.emails.sender._deliver") as deliver:
+            send_email(box, "lead@corp.com", "Hi", "Body", bcc="me@mine.com")
+        message = deliver.call_args.args[1]
+        assert message["Bcc"] == "me@mine.com"
+
+    def test_no_bcc_header_when_address_blank(self):
+        box = Mailbox(username="s@infra.com", password="pw", from_address="s@infra.com")
+        with patch("openoutreach.emails.sender._deliver") as deliver:
+            send_email(box, "lead@corp.com", "Hi", "Body", bcc="")
+        message = deliver.call_args.args[1]
+        assert message["Bcc"] is None
+
+
 # ── handle_email (the EMAIL task) ─────────────────────────────────
 
 
@@ -172,7 +192,10 @@ class TestHandleEmail:
         deal = _ready(fake_session.campaign, "lead@corp.com")
         send = self._run(fake_session)
 
-        send.assert_called_once_with(box, "lead@corp.com", "Hi there", "Short opener.")
+        send.assert_called_once_with(
+            box, "lead@corp.com", "Hi there", "Short opener.",
+            bcc="testuser@example.com",
+        )
         deal.refresh_from_db()
         assert deal.state == DealState.EMAILED
         assert deal.mailbox == box
