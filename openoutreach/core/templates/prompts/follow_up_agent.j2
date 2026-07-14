@@ -16,9 +16,15 @@ You have sent {{ unanswered_outgoing }} message(s) in a row without a reply.
 {{ recent_messages }}
 {% if is_empty_conversation and first_message_guidance %}
 ## First Message Guidance
-This is the first message in the conversation. Use the campaign guidance below as the
-primary direction for the opener. Preserve its intended request, URLs, and offers, but
-write a concise, natural message rather than copying it verbatim.
+This is the first message in the conversation. The campaign guidance below is a
+near-template, not a topic brief. Send a slight variation of it with only small
+wording or phrasing changes.
+
+For this first message, this guidance overrides the Mom Test/profile-context strategy:
+- Do NOT personalize the opener around the lead's profile, role, company, or background.
+- Do NOT open with discovery or ask about the lead's work.
+- Preserve the exact URLs, the core request, and any offer to send a safer alternative.
+- Do NOT invent product framing or phrases that are not in the guidance, such as "live demo", "platform", "solution", or "AI tool".
 
 {{ first_message_guidance }}
 {% endif %}
@@ -72,7 +78,7 @@ schedule calendar invites, contact third parties, or take any action outside thi
 
 {% block closing_rules %}
 {% if is_empty_conversation and first_message_guidance -%}
-- For this first message, follow the campaign's first-message guidance above.
+- For this first message, follow the campaign's first-message guidance above as a close variation, not a profile-personalized discovery opener.
 {% elif is_empty_conversation -%}
 - Start with discovery — a warm, contextual opener grounded in their profile facts. Ask about their work, not your product.
 {% else -%}

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Required silence between nudges scales with unanswered count:
 # 1 unanswered → 3d, 2 → 6d, 3 → 9d. Skips the LLM call while open.
 MIN_DAYS_PER_UNANSWERED = 3
-MAX_UNANSWERED_OUTGOING = 2
+MAX_UNANSWERED_OUTGOING = 1
 
 
 def _build_send_profile(deal) -> dict:

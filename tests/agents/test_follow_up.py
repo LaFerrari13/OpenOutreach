@@ -82,7 +82,12 @@ class TestRenderSystemPrompt:
 
         assert "## First Message Guidance" in prompt
         assert guidance in prompt
-        assert "follow the campaign's first-message guidance" in prompt
+        assert "near-template, not a topic brief" in prompt
+        assert "overrides the Mom Test/profile-context strategy" in prompt
+        assert "Do NOT personalize the opener around the lead's profile" in prompt
+        assert "Do NOT open with discovery" in prompt
+        assert '"live demo", "platform", "solution", or "AI tool"' in prompt
+        assert "as a close variation, not a profile-personalized discovery opener" in prompt
 
     def test_omits_campaign_guidance_after_messages_exist(self, db, fake_session):
         from openoutreach.core.agents.follow_up import _render_system_prompt
