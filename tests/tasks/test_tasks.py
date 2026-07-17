@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 from django.utils import timezone
 
-from openoutreach.crm.models import Deal
+from openoutreach.crm.models import Deal, DealState
 from openoutreach.core.agents.follow_up import FollowUpDecision
 from openoutreach.core.db.deals import set_profile_state
 from openoutreach.linkedin.db.leads import create_enriched_lead, promote_lead_to_deal
@@ -13,7 +13,7 @@ from openoutreach.core.models import Task
 from openoutreach.linkedin.models import ActionLog
 from openoutreach.linkedin.ml.qualifier import BayesianQualifier
 from linkedin_cli.enums import ProfileState
-from linkedin_cli.exceptions import SkipProfile, ReachedConnectionLimit
+from linkedin_cli.exceptions import ProfileInaccessibleError, SkipProfile, ReachedConnectionLimit
 from openoutreach.linkedin.tasks.connect import ConnectStrategy, handle_connect
 from openoutreach.linkedin.tasks.check_pending import handle_check_pending
 from openoutreach.linkedin.tasks.follow_up import handle_follow_up
@@ -245,6 +245,23 @@ class TestHandleCheckPending:
         # next_check_pending_at re-stamped by the state hook to now + 144h
         expected = before + timedelta(hours=144)
         assert abs((deal.next_check_pending_at - expected).total_seconds()) < 10
+
+    @patch("linkedin_cli.actions.status.get_connection_status")
+    def test_profile_inaccessible_marks_failed(self, mock_status, fake_session):
+        mock_status.side_effect = ProfileInaccessibleError("alice (HTTP 403)")
+        _make_pending_due(fake_session)
+
+        task = _make_task(Task.TaskType.CHECK_PENDING, {"campaign_id": fake_session.campaign.pk})
+        handle_check_pending(task, fake_session, _build_context(fake_session))
+
+        deal = Deal.objects.get(lead__public_identifier="alice", campaign=fake_session.campaign)
+        assert deal.state == DealState.FAILED
+        assert deal.reason == "Profile inaccessible: alice (HTTP 403)"
+        assert not Deal.objects.filter(
+            campaign=fake_session.campaign,
+            state=DealState.PENDING,
+            next_check_pending_at__lte=timezone.now(),
+        ).exists()
 
     def test_skips_when_no_due_deals(self, fake_session):
         # No PENDING deals at all → handler marks slot done.

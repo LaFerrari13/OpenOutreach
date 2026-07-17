@@ -15,7 +15,7 @@ from termcolor import colored
 
 from openoutreach.core.db.deals import set_profile_state
 from openoutreach.crm.models import DealState
-from linkedin_cli.exceptions import SkipProfile
+from linkedin_cli.exceptions import ProfileInaccessibleError, SkipProfile
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,15 @@ def handle_check_pending(task, session, qualifiers):
     try:
         # The library returns the observed UI state as a str; lift it into our enum.
         new_state = DealState(get_connection_status(session, profile_for_status).value)
+    except ProfileInaccessibleError as e:
+        logger.warning("Profile inaccessible — marking FAILED: %s", e)
+        set_profile_state(
+            session,
+            public_id,
+            DealState.FAILED.value,
+            reason=f"Profile inaccessible: {e}",
+        )
+        return
     except SkipProfile as e:
         logger.warning("Skipping %s: %s", public_id, e)
         set_profile_state(session, public_id, DealState.FAILED.value)
