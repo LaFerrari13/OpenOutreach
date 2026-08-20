@@ -163,7 +163,10 @@ def materialize_profile_summary_if_missing(deal, session) -> None:
         seller_name=seller_name_from(session),
         context=context,
     )
-    deal.profile_summary = {"facts": facts}
+    deal.profile_summary = {
+        "facts": facts,
+        "first_name": (profile.get("first_name") or "").strip(),
+    }
     deal.save(update_fields=["profile_summary"])
     logger.info(
         "profile_summary built for deal=%s lead=%s (%d facts)",

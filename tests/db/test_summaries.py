@@ -115,7 +115,8 @@ class TestMaterializeProfileSummary:
         mock_extract.assert_called_once()
         deal_with_lead.refresh_from_db()
         assert deal_with_lead.profile_summary == {
-            "facts": ["Senior Engineer at Acme.", "URN ABC123."]
+            "facts": ["Senior Engineer at Acme.", "URN ABC123."],
+            "first_name": "Alice",
         }
 
     def test_empty_profile_logs_and_skips(self, db, fake_session, deal_with_lead, caplog):

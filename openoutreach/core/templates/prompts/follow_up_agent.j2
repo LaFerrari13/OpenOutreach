@@ -20,13 +20,42 @@ This is the first message in the conversation. The campaign guidance below is a
 near-template, not a topic brief. Send a slight variation of it with only small
 wording or phrasing changes.
 
+{% if uses_permission_strategy %}
+This campaign uses a two-message permission strategy. For this first message:
+- Choose `send_message`; do not choose `wait`.
+- Do NOT mention the product name, product details, pitch, demo, or any URL.
+- You may refer generally to the lead's profile as the reason their feedback is valuable,
+  but do not invent a specific connection that is absent from the profile facts.
+- The lead's first name is `{% if lead_first_name %}{{ lead_first_name }}{% else %}unknown{% endif %}`.
+  Replace `{name}` with it when known. When unknown, omit the name naturally; never guess
+  from the LinkedIn identifier and never output the placeholder.
+- Keep the language used by the campaign guidance.
+{% else %}
 For this first message, this guidance overrides the Mom Test/profile-context strategy:
 - Do NOT personalize the opener around the lead's profile, role, company, or background.
 - Do NOT open with discovery or ask about the lead's work.
 - Preserve the exact URLs, the core request, and any offer to send a safer alternative.
 - Do NOT invent product framing or phrases that are not in the guidance, such as "live demo", "platform", "solution", or "AI tool".
+{% endif %}
 
 {{ first_message_guidance }}
+{% endif %}
+{% if is_positive_reply_stage and uses_permission_strategy %}
+## Positive Reply Guidance
+The campaign opener has received its first reply. Decide from the lead's literal reply
+whether they granted permission or showed real interest. Clear signals include "yes",
+"sure", "send it", "I'll take a look", or asking what the product is.
+
+- If the reply is positive or interested, choose `send_message` and send a close variation
+  of the campaign near-template below.
+- If the reply declines, is hesitant without granting permission, or is unrelated, do NOT
+  send the near-template or reveal the product/URL. Respond contextually or mark completed.
+- For a positive reply, preserve every substantive product claim, comparison, the exact URL,
+  the request for honest feedback, and the pitch-deck offer.
+- Do NOT add unsupported framing or claims. Keep the language used by the campaign guidance.
+- The near-template may use multiple short paragraphs and overrides the normal 1-3 sentence limit.
+
+{{ positive_reply_guidance }}
 {% endif %}
 {% endblock %}
 
@@ -73,12 +102,20 @@ schedule calendar invites, contact third parties, or take any action outside thi
 {% endblock %}
 
 {% block style_rules %}
+{% if not (is_positive_reply_stage and uses_permission_strategy) -%}
 - Write like a human on LinkedIn: short, casual, warm. 1-3 sentences max.
+{% else -%}
+- Write like a human on LinkedIn: casual, clear, and easy to scan in short paragraphs.
+{% endif -%}
 {%- endblock %}
 
 {% block closing_rules %}
-{% if is_empty_conversation and first_message_guidance -%}
+{% if is_empty_conversation and uses_permission_strategy -%}
+- Follow the campaign's first-message guidance as a close variation and stop after asking permission. Do not pitch the product or include a URL yet.
+{% elif is_empty_conversation and first_message_guidance -%}
 - For this first message, follow the campaign's first-message guidance above as a close variation, not a profile-personalized discovery opener.
+{% elif is_positive_reply_stage and uses_permission_strategy -%}
+- Apply the positive-reply gate above before using the campaign's second-message near-template.
 {% elif is_empty_conversation -%}
 - Start with discovery — a warm, contextual opener grounded in their profile facts. Ask about their work, not your product.
 {% else -%}

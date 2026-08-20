@@ -122,20 +122,47 @@ def _load_recent_messages(deal, limit: int = RECENT_MESSAGES_WINDOW) -> list:
     return list(reversed(list(qs)))
 
 
+def _is_positive_reply_stage(deal) -> bool:
+    """Whether one opener has received replies but no second outbound message."""
+    rows = list(
+        deal.messages.order_by("creation_date", "pk")
+        .values_list("is_outgoing", "content")
+    )
+    messages = [(outgoing, content) for outgoing, content in rows if (content or "").strip()]
+    return bool(
+        messages
+        and messages[0][0]
+        and not messages[-1][0]
+        and sum(1 for outgoing, _ in messages if outgoing) == 1
+    )
+
+
 def _render_system_prompt(session, deal, recent_messages: list) -> str:
     """Render the LinkedIn follow-up prompt: shared base + the LinkedIn-only extras."""
     from django.utils import timezone
     from openoutreach.core.agents.prompt import base_context, render
 
     now = timezone.now()
+    first_message_guidance = (deal.campaign.first_message_guidance or "").strip()
+    positive_reply_guidance = (deal.campaign.positive_reply_guidance or "").strip()
+    uses_permission_strategy = bool(first_message_guidance and positive_reply_guidance)
+    is_empty_conversation = not recent_messages
+    is_positive_reply_stage = _is_positive_reply_stage(deal)
     return render(
         "follow_up_agent.j2",
         **base_context(session, deal),
         contact_email=session.linkedin_profile.linkedin_username,
         chat_summary=_format_facts(deal.chat_summary),
         recent_messages=_format_recent_messages(recent_messages, now),
-        is_empty_conversation=not recent_messages,
-        first_message_guidance=(deal.campaign.first_message_guidance or "").strip(),
+        is_empty_conversation=is_empty_conversation,
+        is_positive_reply_stage=is_positive_reply_stage,
+        first_message_guidance=first_message_guidance,
+        positive_reply_guidance=positive_reply_guidance,
+        uses_permission_strategy=uses_permission_strategy,
+        suppress_campaign_pitch_context=(
+            uses_permission_strategy
+            and (is_empty_conversation or is_positive_reply_stage)
+        ),
         today=now.strftime("%Y-%m-%d"),
         days_since_last_outgoing=_days_since_last_outgoing(recent_messages, now),
         unanswered_outgoing=_count_unanswered_outgoing(recent_messages),

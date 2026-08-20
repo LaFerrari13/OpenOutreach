@@ -27,6 +27,11 @@ FIRST_MESSAGE_GUIDANCE = MultilineText(
     "First LinkedIn message guidance (used only for an empty conversation)",
     required=False,
 )
+POSITIVE_REPLY_GUIDANCE = MultilineText(
+    "positive_reply_guidance",
+    "LinkedIn message guidance after the opener receives a positive reply",
+    required=False,
+)
 BOOKING_LINK = Text("booking_link", "Booking link (e.g. https://cal.com/you)", required=False)
 SEED_URLS = MultilineText(
     "seed_urls", "LinkedIn seed profile URLs (one per line)", required=False,
@@ -77,7 +82,8 @@ LEGAL = Confirm(
 # ── Profile ──────────────────────────────────────────────────────
 
 SELF_HOSTED_QUESTIONS = [
-    CAMPAIGN_NAME, PRODUCT_DESCRIPTION, CAMPAIGN_OBJECTIVE, FIRST_MESSAGE_GUIDANCE, BOOKING_LINK,
+    CAMPAIGN_NAME, PRODUCT_DESCRIPTION, CAMPAIGN_OBJECTIVE, FIRST_MESSAGE_GUIDANCE,
+    POSITIVE_REPLY_GUIDANCE, BOOKING_LINK,
     SEED_URLS,
     LINKEDIN_EMAIL, LINKEDIN_PASSWORD,
     AI_MODEL, LLM_API_KEY, LLM_API_BASE,

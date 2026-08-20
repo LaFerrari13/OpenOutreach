@@ -399,6 +399,14 @@ class TestHandleFollowUp:
 
         base = timezone.now() - timedelta(days=10)
         _add_chat_message(fake_session, deal, "first nudge", True, base, "out-1")
+        _add_chat_message(
+            fake_session,
+            deal,
+            "sure, send it",
+            False,
+            base + timedelta(minutes=1),
+            "in-1",
+        )
 
         def agent_side_effect(session_arg, deal_arg):
             _add_chat_message(
@@ -406,7 +414,7 @@ class TestHandleFollowUp:
                 deal_arg,
                 "second nudge",
                 True,
-                base + timedelta(minutes=1),
+                base + timedelta(minutes=2),
                 "out-2",
             )
             return FollowUpDecision(

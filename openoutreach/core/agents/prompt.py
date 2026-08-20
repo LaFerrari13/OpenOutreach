@@ -34,6 +34,7 @@ def base_context(session, deal) -> dict:
         "campaign_objective": campaign.campaign_objective or "",
         "booking_link": campaign.booking_link or "",
         "profile_summary": _format_facts(deal.profile_summary),
+        "lead_first_name": ((deal.profile_summary or {}).get("first_name") or "").strip(),
     }
 
 

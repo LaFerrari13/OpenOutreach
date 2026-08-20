@@ -26,6 +26,7 @@ Follow-up behavior is controlled by:
   - `product_docs` — product/service description, used as context for the agent.
   - `campaign_objective` — campaign goal, used as context for the agent.
   - `first_message_guidance` — optional guidance used only for the first LinkedIn message in an empty thread.
+  - `positive_reply_guidance` — optional second-message near-template used only after the opener receives a positive or interested reply.
   - `booking_link` — included naturally in messages when suggesting a meeting.
 
 - **LLM settings** (via `.env` or environment variables):

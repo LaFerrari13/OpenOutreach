@@ -103,6 +103,107 @@ class TestRenderSystemPrompt:
         assert "## First Message Guidance" not in prompt
         assert guidance not in prompt
 
+    def test_two_message_opener_uses_name_and_withholds_product(self, db, fake_session):
+        from openoutreach.core.agents.follow_up import _render_system_prompt
+
+        campaign = fake_session.campaign
+        campaign.product_docs = "TAMdx product details that must not appear in the opener prompt."
+        campaign.campaign_objective = "Pitch TAMdx to this lead."
+        campaign.booking_link = "https://cal.example.com/tamdx"
+        campaign.first_message_guidance = (
+            "hi {name}, i'm building something and think you can provide valuable feedback. "
+            "do you have 2 mins to check it out?"
+        )
+        campaign.positive_reply_guidance = (
+            "This is TAMdx. See https://tamdx.sorvanis.ai and share your honest feedback."
+        )
+        campaign.save(update_fields=[
+            "product_docs", "campaign_objective",
+            "booking_link", "first_message_guidance", "positive_reply_guidance",
+        ])
+        deal = DealFactory(
+            lead=LeadFactory(public_identifier="alice"),
+            campaign=campaign,
+            profile_summary={"facts": ["Alice works in growth."], "first_name": "Alice"},
+        )
+
+        prompt = _render_system_prompt(fake_session, deal, [])
+
+        assert "This campaign uses a two-message permission strategy" in prompt
+        assert "The lead's first name is `Alice`" in prompt
+        assert "Do NOT mention the product name, product details, pitch, demo, or any URL" in prompt
+        assert "## Positive Reply Guidance" not in prompt
+        assert campaign.positive_reply_guidance not in prompt
+        assert "stop after asking permission" in prompt
+        assert campaign.product_docs not in prompt
+        assert campaign.campaign_objective not in prompt
+        assert campaign.booking_link not in prompt
+        assert "You follow the Mom Test method" not in prompt
+        assert "replaces the normal discovery" in prompt
+        assert "strategy for this stage" in prompt
+        assert "Use the language of the active campaign message guidance" in prompt
+
+    def test_positive_first_reply_includes_second_near_template(self, db, fake_session):
+        from django.utils import timezone
+        from openoutreach.chat.models import ChatMessage
+        from openoutreach.core.agents.follow_up import _load_recent_messages, _render_system_prompt
+
+        campaign = fake_session.campaign
+        campaign.first_message_guidance = "Ask permission first."
+        campaign.positive_reply_guidance = (
+            "This is TAMdx. Demo: https://tamdx.sorvanis.ai. I only need honest feedback."
+        )
+        campaign.save(update_fields=["first_message_guidance", "positive_reply_guidance"])
+        deal = DealFactory(lead=LeadFactory(public_identifier="alice"), campaign=campaign)
+        ChatMessage.objects.create(
+            deal=deal, content="Do you have two minutes to check it out?", is_outgoing=True,
+            owner=fake_session.django_user, linkedin_urn="urn:opener", creation_date=timezone.now(),
+        )
+        ChatMessage.objects.create(
+            deal=deal, content="Sure, send it over.", is_outgoing=False,
+            owner=fake_session.django_user, linkedin_urn="urn:reply", creation_date=timezone.now(),
+        )
+
+        prompt = _render_system_prompt(fake_session, deal, _load_recent_messages(deal))
+
+        assert "## First Message Guidance" not in prompt
+        assert "## Positive Reply Guidance" in prompt
+        assert campaign.positive_reply_guidance in prompt
+        assert "If the reply declines, is hesitant without granting permission, or is unrelated" in prompt
+        assert "overrides the normal 1-3 sentence limit" in prompt
+        assert "Apply the positive-reply gate" in prompt
+
+    def test_second_guidance_is_removed_after_second_outgoing(self, db, fake_session):
+        from datetime import timedelta
+        from django.utils import timezone
+        from openoutreach.chat.models import ChatMessage
+        from openoutreach.core.agents.follow_up import _load_recent_messages, _render_system_prompt
+
+        campaign = fake_session.campaign
+        campaign.first_message_guidance = "Ask permission first."
+        campaign.positive_reply_guidance = "Explain TAMdx and share the demo."
+        campaign.save(update_fields=["first_message_guidance", "positive_reply_guidance"])
+        deal = DealFactory(lead=LeadFactory(public_identifier="alice"), campaign=campaign)
+        base = timezone.now()
+        turns = [
+            ("Can I show you something?", True),
+            ("Sure.", False),
+            ("This is TAMdx.", True),
+            ("How does it find companies?", False),
+        ]
+        for i, (content, outgoing) in enumerate(turns):
+            ChatMessage.objects.create(
+                deal=deal, content=content, is_outgoing=outgoing,
+                owner=fake_session.django_user, linkedin_urn=f"urn:turn:{i}",
+                creation_date=base + timedelta(minutes=i),
+            )
+
+        prompt = _render_system_prompt(fake_session, deal, _load_recent_messages(deal))
+
+        assert "## Positive Reply Guidance" not in prompt
+        assert campaign.positive_reply_guidance not in prompt
+        assert "Respond contextually to the literal phrasing of the last message" in prompt
+
 
 class TestLoadRecentMessages:
     def test_returns_last_n_in_chronological_order(self, db, fake_session):
